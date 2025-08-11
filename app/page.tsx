@@ -1,103 +1,237 @@
+"use client";
+
 import Image from "next/image";
+import { FiMic } from "react-icons/fi";
+import { useEffect, useRef, useState } from "react";
+
+type Message = {
+  role: "user" | "assistant";
+  text: string;
+};
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const previewSigRef = useRef<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    audioRef.current = new Audio();
+  }, []);
+
+  // Auto-refresh preview iframe when preview.html changes on disk
+  useEffect(() => {
+    let isMounted = true;
+    const check = async () => {
+      try {
+        const res = await fetch("/preview.html", { method: "HEAD", cache: "no-store" });
+        const etag = res.headers.get("etag");
+        const lastModified = res.headers.get("last-modified");
+        const sig = etag || lastModified || String(Date.now());
+        if (isMounted && sig && sig !== previewSigRef.current) {
+          previewSigRef.current = sig;
+          setPreviewVersion((v) => v + 1);
+        }
+      } catch {}
+    };
+    // initial check and interval polling
+    check();
+    const id = window.setInterval(check, 2000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  async function startRecording() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: "audio/webm",
+    });
+
+    audioChunksRef.current = [];
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      await handleSendAudio(audioBlob);
+      stream.getTracks().forEach((t) => t.stop());
+    };
+
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.start();
+    setIsRecording(true);
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }
+
+  async function handleSendAudio(blob: Blob) {
+    setIsBusy(true);
+    // Placeholders
+    let userIdx = -1;
+    let assistantIdx = -1;
+    setMessages((prev) => {
+      const next = [...prev];
+      userIdx = next.push({ role: "user", text: "(voice) Transcribing..." }) - 1;
+      assistantIdx = next.push({ role: "assistant", text: "Transcribing..." }) - 1;
+      return next;
+    });
+
+    try {
+      // 1) STT
+      const sttForm = new FormData();
+      const file = new File([blob], "input.webm", { type: "audio/webm" });
+      sttForm.append("audio", file);
+      const sttRes = await fetch("/api/stt", { method: "POST", body: sttForm });
+      if (!sttRes.ok) throw new Error("STT failed");
+      const sttData: { transcript: string } = await sttRes.json();
+
+      setMessages((prev) => {
+        const next = [...prev];
+        if (userIdx >= 0 && userIdx < next.length) {
+          next[userIdx] = { role: "user", text: sttData.transcript };
+        }
+        if (assistantIdx >= 0 && assistantIdx < next.length) {
+          next[assistantIdx] = { role: "assistant", text: "Thinking..." };
+        }
+        return next;
+      });
+
+      // 2) Agent
+      const agentRes = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: sttData.transcript }),
+      });
+      if (!agentRes.ok) throw new Error("Agent failed");
+      const agentData: { text: string } = await agentRes.json();
+
+      setMessages((prev) => {
+        const next = [...prev];
+        if (assistantIdx >= 0 && assistantIdx < next.length) {
+          next[assistantIdx] = { role: "assistant", text: agentData.text };
+        }
+        return next;
+      });
+
+      // 3) TTS (do not block showing the assistant text)
+      const ttsRes = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: agentData.text }),
+      });
+      if (ttsRes.ok) {
+        const ttsData: { audioBase64: string; mimeType: string } = await ttsRes.json();
+        if (audioRef.current) {
+          const audioUrl = `data:${ttsData.mimeType};base64,${ttsData.audioBase64}`;
+          audioRef.current.src = audioUrl;
+          audioRef.current.play().catch(() => {});
+        }
+      }
+    } catch (e) {
+      setMessages((prev) => {
+        const next = [...prev];
+        if (assistantIdx >= 0 && assistantIdx < next.length) {
+          next[assistantIdx] = { role: "assistant", text: "Error: request failed" };
+        }
+        return next;
+      });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen p-4 sm:p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-2rem)]">
+        {/* Left: Chat */}
+        <div className="flex flex-col rounded-2xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.08)] backdrop-blur-md border border-black/5 bg-white/70">
+          <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
+                <Image src="/file.svg" alt="Assistant" width={16} height={16} className="opacity-80" />
+              </span>
+              <div className="leading-tight text-black">
+                <h2 className="text-[15px] font-semibold tracking-tight text-black">Assistant</h2>
+                <p className="text-xs text-black/70">STT → GPT-5 → TTS</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            {messages.length === 0 ? (
+              <div className="text-sm text-black/80">
+                Tap the mic and describe the website you want to create.
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {messages.map((m, i) => (
+                  <li key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+                    <span
+                      className="inline-block px-3.5 py-2.5 rounded-2xl text-sm max-w-[85%] whitespace-pre-wrap break-words shadow-sm text-black"
+                      style={{
+                        background: m.role === "user" ? "#111827" : "#f3f4f6",
+                        color: m.role === "user" ? "#ffffff" : "#111827",
+                      }}
+                    >
+                      {m.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="px-5 py-8 border-t border-black/5 flex items-center gap-3">
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              className={`h-12 w-12 rounded-full flex items-center justify-center text-white shadow ${
+                isRecording ? "bg-red-600 animate-pulse" : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
+              aria-label={isRecording ? "Stop recording" : "Start recording"}
+              disabled={isBusy}
+              title={isBusy ? "Processing..." : undefined}
+            >
+              {isRecording ? "■" : <FiMic size={20} />}
+            </button>
+            <span className="text-sm text-black">
+              {isRecording ? "Recording... Click to stop." : isBusy ? "Thinking..." : "Click to speak."}
+            </span>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* Right: Preview */}
+        <div className="rounded-2xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.08)] border border-black/5 bg-white/85 backdrop-blur">
+          <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between bg-white/60">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
+                <Image src="/window.svg" alt="Preview" width={16} height={16} className="opacity-80" />
+              </span>
+              <h2 className="text-xl font-semibold tracking-tight text-black">Preview</h2>
+            </div>
+            <a
+              href="/preview.html"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-emerald-700 hover:underline"
+            >
+              Open in new tab
+            </a>
+          </div>
+          <iframe
+            title="Preview"
+            src={`/preview.html?v=${previewVersion}`}
+            className="w-full h-full min-h-[50vh] lg:min-h-[calc(100vh-6rem)] bg-white"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pocket Chef – minimal cooking app prototype</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f4f2;
+      --panel: #ffffff;
+      --ink: #0e0e0e;
+      --muted: #666;
+      --accent: #ff7a00;
+      --grid: rgba(0,0,0,.06);
+      --edge: rgba(0,0,0,.12);
+      --shadow: 0 10px 28px rgba(0,0,0,.08);
+    }
+    [data-theme="dark"]{
+      --bg: #0e0e0e;
+      --panel: #151515;
+      --ink: #f1f1f1;
+      --muted: #a6a6a6;
+      --grid: rgba(255,255,255,.06);
+      --edge: rgba(255,255,255,.12);
+      --shadow: 0 12px 36px rgba(0,0,0,.5);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 1px 1px, var(--grid) 1px, transparent 1px) 0 0/12px 12px,
+        var(--bg);
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Hiragino Kaku Gothic ProN", Meiryo, "IBM Plex Mono", sans-serif;
+      letter-spacing: 0.1px;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr 320px;
+      gap: 16px;
+      padding: 16px;
+      min-height: 100dvh;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--edge);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    header.topbar{
+      grid-column: 1/-1;
+      display:flex;align-items:center;gap:10px;justify-content:space-between;
+      padding: 8px 2px 0 2px;
+    }
+    .brand{display:flex;align-items:center;gap:10px}
+    .dot { width: 14px; height: 14px; background: var(--accent); border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+    .title { font-weight: 800; letter-spacing: 0.5px; font-size: 18px; }
+    .mode-btn {
+      background: transparent; border: 1px solid var(--edge); color: var(--ink);
+      border-radius: 999px; padding: 8px 12px; font-weight:600; cursor:pointer;
+    }
+
+    /* Recipes panel */
+    .recipes h2 { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 2px 0 8px; }
+    .search { display:flex; gap:8px; }
+    .search input { flex:1; padding:10px 12px; border-radius: 10px; border:1px solid var(--edge); background:transparent; color:var(--ink); }
+    .search button { border:none; background: var(--ink); color:#fff; border-radius: 10px; padding: 10px 12px; cursor:pointer; }
+    .list { margin-top:12px; overflow:auto; }
+    .recipe-item { display:flex; align-items:center; gap:10px; padding:10px; border:1px dashed var(--edge); border-radius:12px; margin-bottom:8px; cursor:pointer; transition: background .15s; }
+    .recipe-item:hover { background: rgba(0,0,0,.04); }
+    [data-theme="dark"] .recipe-item:hover { background: rgba(255,255,255,.04); }
+    .bullet { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
+    .recipe-item .name { font-weight: 600; }
+    .add-btn { margin-top: 10px; border: 1px dashed var(--edge); background: transparent; padding: 10px; border-radius: 12px; cursor: pointer; font-weight: 600; }
+
+    /* Center/LCD */
+    .center { gap: 12px; }
+    .lcd {
+      position: relative; flex: none; padding: 18px; border-radius: 14px; border: 1px solid var(--edge);
+      background:
+        radial-gradient(circle at 2px 2px, rgba(0,0,0,.06) 1px, transparent 1px) 0 0/8px 8px,
+        linear-gradient(to bottom, rgba(0,0,0,.06), transparent 40%, transparent 60%, rgba(0,0,0,.05));
+      color: var(--ink);
+      min-height: 160px; display:flex; flex-direction:column; justify-content:center; gap:6px;
+    }
+    .lcd .label { font: 600 12px "IBM Plex Mono", monospace; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+    .lcd .main { font: 800 clamp(20px, 4vw, 40px) Inter, sans-serif; line-height: 1.1; }
+    .lcd .sub { font: 600 13px "IBM Plex Mono", monospace; color: var(--muted); }
+
+    .sequencer { display:flex; gap:6px; flex-wrap:wrap; padding: 8px 2px; }
+    .step { width: 26px; height: 26px; border-radius: 6px; border:1px solid var(--edge); display:grid; place-items:center; font:600 12px "IBM Plex Mono", monospace; color:var(--muted); cursor:pointer; transition: transform .1s, background .2s; }
+    .step:hover{ transform: translateY(-1px); }
+    .step.active { background: var(--accent); color: #fff; border-color: transparent; }
+    .step.done { background: rgba(0,0,0,.08); color: var(--ink); }
+    [data-theme="dark"] .step.done { background: rgba(255,255,255,.08); }
+
+    .ingredients { margin-top: 6px; border-top: 1px dashed var(--edge); padding-top: 8px; display:grid; grid-template-columns: 1fr; gap: 6px; }
+    .ingredients h3 { margin: 0; font-size: 12px; letter-spacing:1px; text-transform: uppercase; color: var(--muted); }
+    .tag { display:inline-block; padding: 6px 10px; border:1px solid var(--edge); border-radius: 999px; font: 600 12px Inter, sans-serif; color: var(--ink); }
+
+    /* Controls panel */
+    .controls .timer {
+      margin: 8px 0; padding: 16px; border-radius: 14px; border: 1px solid var(--edge);
+      background: linear-gradient(180deg, rgba(0,0,0,.05), transparent 60%);
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+    }
+    .timer .time { font: 800 clamp(28px,6vw,44px) "IBM Plex Mono", monospace; letter-spacing: 1px; }
+    .timer .hint { font: 12px Inter, sans-serif; color: var(--muted); }
+
+    .keys { display:flex; justify-content:space-between; gap: 10px; margin-top: 6px; }
+    .key { flex:1; border:none; cursor:pointer; color:#fff; background: var(--ink); padding: 14px 0; border-radius: 12px; font: 700 14px Inter, sans-serif; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+    .key.secondary { background: #2b2b2b; }
+    [data-theme="dark"] .key.secondary { background: #2a2a2a; }
+    .key.accent { background: var(--accent); }
+
+    .mini { display:flex; gap:8px; margin-top: 10px; }
+    .mini button { flex:1; border: 1px solid var(--edge); background: transparent; padding: 10px; border-radius: 10px; cursor:pointer; font-weight:600; }
+
+    /* New recipe composer */
+    .composer { margin-top: 10px; border-top: 1px dashed var(--edge); padding-top: 10px; }
+    .composer h3 { margin: 0 0 8px; font-size: 12px; text-transform:uppercase; letter-spacing:1px; color: var(--muted); }
+    .field { display:grid; gap:6px; margin-bottom:8px; }
+    .field input, .field textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--edge); background: transparent; color: var(--ink); }
+    .rows { display:grid; gap:8px; max-height: 140px; overflow:auto; }
+    .row { display:grid; grid-template-columns: 80px 1fr auto; gap:6px; align-items:center; }
+    .row input { padding:8px 10px; border-radius:10px; border:1px solid var(--edge); background: transparent; color: var(--ink); }
+    .row .rm { border:none; background: transparent; color: var(--muted); cursor: pointer; font-weight: 800; }
+    .composer .add-step { border: 1px dashed var(--edge); background: transparent; padding: 8px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+    .composer .save { width:100%; margin-top: 6px; border:none; padding:12px; border-radius:12px; background: var(--accent); color:#fff; font-weight:800; cursor:pointer; }
+
+    /* Responsive */
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .panel { order: initial; }
+      .controls { order: -1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="dot" aria-hidden="true"></div>
+        <div class="title">pocket chef</div>
+      </div>
+      <div>
+        <button class="mode-btn" id="modeBtn" title="Toggle theme">mono / dark</button>
+      </div>
+    </header>
+
+    <aside class="panel recipes" aria-label="Recipes">
+      <h2>Recipes</h2>
+      <div class="search">
+        <input id="search" type="search" placeholder="Search" aria-label="Search recipes" />
+        <button id="newBtn" title="New recipe">＋</button>
+      </div>
+      <div class="list" id="recipeList"></div>
+      <button class="add-btn" id="importSample">Import sample set</button>
+    </aside>
+
+    <main class="panel center" aria-live="polite">
+      <div class="lcd" id="lcd">
+        <div class="label" id="lcdRecipe">—</div>
+        <div class="main" id="lcdStep">Select a recipe</div>
+        <div class="sub" id="lcdInfo">—</div>
+      </div>
+      <div class="sequencer" id="sequencer"></div>
+      <div class="ingredients">
+        <h3>Ingredients</h3>
+        <div id="ingredientTags"></div>
+      </div>
+    </main>
+
+    <aside class="panel controls" aria-label="Controls">
+      <div class="timer">
+        <div class="label" style="font:600 12px 'IBM Plex Mono', monospace; color:var(--muted); text-transform:uppercase; letter-spacing:1px;">Timer</div>
+        <div class="time" id="time">00:00</div>
+        <div class="hint" id="timeHint">Set per step duration • auto-advance</div>
+      </div>
+      <div class="keys">
+        <button class="key secondary" id="prev">Prev</button>
+        <button class="key accent" id="play">Play</button>
+        <button class="key secondary" id="next">Next</button>
+      </div>
+      <div class="mini">
+        <button id="editStep">Edit step</button>
+        <button id="resetRecipe">Reset</button>
+      </div>
+
+      <div class="composer" id="composer" hidden>
+        <h3>New recipe</h3>
+        <div class="field"><input id="rName" placeholder="Recipe name" /></div>
+        <div class="field"><textarea id="rIngr" rows="3" placeholder="Ingredients (comma separated)"></textarea></div>
+        <div class="field">
+          <div class="rows" id="rows"></div>
+          <button class="add-step" id="addStep">＋ Add step</button>
+        </div>
+        <button class="save" id="saveRecipe">Save recipe</button>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // Simple store
+    const LS_KEY = 'pocket-chef-state-v1';
+    const $ = (sel, parent=document) => parent.querySelector(sel);
+    const $$ = (sel, parent=document) => Array.from(parent.querySelectorAll(sel));
+
+    const state = {
+      recipes: [],
+      current: null, // recipe id
+      stepIndex: 0,
+      timer: { running:false, endAt:0, remaining:0 }
+    };
+
+    function save(){ localStorage.setItem(LS_KEY, JSON.stringify({recipes: state.recipes, current: state.current})); }
+    function load(){ try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if(s){ state.recipes = s.recipes||[]; state.current = s.current||null; } } catch(e){} }
+
+    // Audio clicks & alarms
+    let actx;
+    function beep(f=950, dur=0.07, type='square', vol=0.06){
+      try{
+        actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+        const o = actx.createOscillator();
+        const g = actx.createGain();
+        o.type = type; o.frequency.value = f; g.gain.value = vol;
+        o.connect(g).connect(actx.destination);
+        o.start();
+        setTimeout(()=>{ o.stop(); }, dur*1000);
+      }catch(e){}
+    }
+    function chime(){
+      // little up-arp
+      [660, 880, 1320].forEach((hz,i)=> setTimeout(()=>beep(hz, 0.08, 'sine', 0.05), i*120));
+    }
+
+    // Sample data
+    const SAMPLE = [
+      {
+        id: 'miso-soup', name: 'Miso Soup',
+        ingredients: ['dashi 400ml','tofu 150g','wakame','miso 2 tbsp','spring onion'],
+        steps: [
+          { t: 1, text: 'Prep: cut tofu & slice spring onion' },
+          { t: 3, text: 'Warm dashi to gentle simmer' },
+          { t: 1, text: 'Add wakame, heat 1 min' },
+          { t: 2, text: 'Turn off heat, dissolve miso' },
+          { t: 0, text: 'Serve' },
+        ]
+      },
+      {
+        id: 'quick-pasta', name: 'Quick Tomato Pasta',
+        ingredients: ['spaghetti 160g','garlic 2 cloves','olive oil','tomato passata 250ml','salt','pepper','basil'],
+        steps: [
+          { t: 8, text: 'Boil pasta in salted water' },
+          { t: 2, text: 'Sauté garlic in oil' },
+          { t: 5, text: 'Add passata, simmer' },
+          { t: 1, text: 'Combine pasta + sauce' },
+          { t: 0, text: 'Finish with basil' },
+        ]
+      }
+    ];
+
+    // UI renderers
+    function renderList(filter=''){
+      const wrap = $('#recipeList');
+      wrap.innerHTML='';
+      state.recipes
+        .filter(r => r.name.toLowerCase().includes(filter.toLowerCase()))
+        .forEach(r => {
+          const el = document.createElement('div');
+          el.className = 'recipe-item';
+          el.innerHTML = `<div class="bullet"></div><div class="name">${r.name}</div>`;
+          el.onclick = () => { state.current = r.id; state.stepIndex = 0; stopTimer(); renderAll(); save(); beep(); };
+          wrap.appendChild(el);
+        });
+    }
+
+    function fmt(mins){ const m = Math.max(0, Math.floor(mins)); return m+'m'; }
+
+    function renderCenter(){
+      const lcdRecipe = $('#lcdRecipe');
+      const lcdStep = $('#lcdStep');
+      const lcdInfo = $('#lcdInfo');
+      const seq = $('#sequencer');
+      const tags = $('#ingredientTags');
+      const r = state.recipes.find(x=>x.id===state.current);
+      if(!r){ lcdRecipe.textContent='—'; lcdStep.textContent='Select a recipe'; lcdInfo.textContent='—'; seq.innerHTML=''; tags.innerHTML=''; return; }
+      lcdRecipe.textContent = r.name;
+      const s = r.steps[state.stepIndex] || { text:'—', t:0 };
+      lcdStep.textContent = s.text;
+      lcdInfo.textContent = `Step ${state.stepIndex+1}/${r.steps.length} • ${fmt(s.t)}`;
+      // sequencer
+      seq.innerHTML = '';
+      r.steps.forEach((st, i) => {
+        const b = document.createElement('button');
+        b.className = 'step'+(i===state.stepIndex?' active':'')+(i < state.stepIndex?' done':'');
+        b.textContent = i+1;
+        b.title = `${st.text} (${fmt(st.t)})`;
+        b.onclick = () => { state.stepIndex = i; stopTimer(); renderAll(); beep(740); };
+        seq.appendChild(b);
+      });
+      // ingredients
+      tags.innerHTML = r.ingredients.map(i=>`<span class="tag">${i}</span>`).join(' ');
+      // time preset
+      const t = r.steps[state.stepIndex]?.t || 0;
+      setTime(t*60*1000);
+    }
+
+    function setTime(ms){
+      if(!state.timer.running) {
+        state.timer.remaining = ms;
+        $('#time').textContent = mmss(ms);
+      }
+    }
+    function mmss(ms){
+      const sec = Math.max(0, Math.ceil(ms/1000));
+      const m = Math.floor(sec/60), s = sec%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    let tickId = null;
+    function startTimer(){
+      if(tickId) return;
+      const now = performance.now();
+      if(state.timer.remaining<=0){ state.timer.remaining = (getCurrentStep()?.t||0)*60*1000; }
+      state.timer.endAt = now + state.timer.remaining;
+      state.timer.running = true;
+      $('#play').textContent = 'Pause';
+      tickId = setInterval(()=>{
+        const left = state.timer.endAt - performance.now();
+        state.timer.remaining = left;
+        $('#time').textContent = mmss(left);
+        if(left <= 0){
+          clearInterval(tickId); tickId = null; state.timer.running=false; $('#play').textContent='Play';
+          chime();
+          nextStep(true);
+        }
+      }, 120);
+    }
+    function stopTimer(){ if(tickId){ clearInterval(tickId); tickId=null; } state.timer.running=false; $('#play').textContent='Play'; }
+
+    function getCurrentRecipe(){ return state.recipes.find(r=>r.id===state.current); }
+    function getCurrentStep(){ const r = getCurrentRecipe(); return r? r.steps[state.stepIndex] : null; }
+
+    function nextStep(auto=false){
+      const r = getCurrentRecipe(); if(!r) return;
+      if(state.stepIndex < r.steps.length-1){ state.stepIndex++; renderCenter(); save(); if(auto) startTimer(); }
+    }
+    function prevStep(){ const r = getCurrentRecipe(); if(!r) return; if(state.stepIndex>0){ state.stepIndex--; renderCenter(); save(); } }
+
+    function renderAll(){ renderList($('#search').value||''); renderCenter(); }
+
+    // Events
+    $('#play').onclick = () => { state.timer.running ? (stopTimer(), beep(420)) : (startTimer(), beep(980)); };
+    $('#next').onclick = () => { stopTimer(); nextStep(false); beep(1020); };
+    $('#prev').onclick = () => { stopTimer(); prevStep(); beep(640); };
+    $('#resetRecipe').onclick = () => { stopTimer(); state.stepIndex=0; renderCenter(); beep(360); };
+
+    // Edit step (quick editor)
+    $('#editStep').onclick = () => {
+      const r = getCurrentRecipe(); if(!r) return;
+      const s = r.steps[state.stepIndex]; if(!s) return;
+      const text = prompt('Step text:', s.text);
+      if(text===null) return;
+      const t = prompt('Minutes (0-120):', String(s.t));
+      const n = Math.max(0, Math.min(120, parseInt(t,10)||0));
+      s.text = text; s.t = n; save(); renderAll(); beep(900);
+    };
+
+    // Search
+    $('#search').addEventListener('input', e=> renderList(e.target.value));
+
+    // Composer
+    $('#newBtn').onclick = () => { const c=$('#composer'); c.hidden = !c.hidden; if(!c.hidden){ buildComposerRows([]); $('#rName').focus(); } };
+    $('#addStep').onclick = () => addComposerRow({t:1, text:''});
+    $('#saveRecipe').onclick = saveNewRecipe;
+    $('#importSample').onclick = () => { if(!state.recipes.length){ state.recipes = SAMPLE; state.current = SAMPLE[0].id; save(); renderAll(); } else { alert('Already have recipes.'); } };
+
+    function buildComposerRows(rows){
+      const wrap = $('#rows'); wrap.innerHTML='';
+      rows.forEach(addComposerRow);
+      if(!rows.length){ addComposerRow({t:1, text:''}); }
+    }
+    function addComposerRow(data){
+      const wrap = $('#rows');
+      const div = document.createElement('div');
+      div.className = 'row';
+      div.innerHTML = `<input type="number" min="0" max="120" value="${data.t||0}" aria-label="Minutes" />
+                       <input type="text" value="${(data.text||'').replace(/"/g,'&quot;')}" placeholder="Step description" />
+                       <button class="rm" title="Remove">×</button>`;
+      const [minEl, textEl, rm] = div.children;
+      rm.onclick = () => { div.remove(); beep(300); };
+      wrap.appendChild(div);
+    }
+
+    function saveNewRecipe(){
+      const name = $('#rName').value.trim(); if(!name) return alert('Enter recipe name');
+      const ings = $('#rIngr').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const steps = $$('.row', $('#rows')).map(r=>({ t: Math.max(0, parseInt(r.children[0].value,10)||0), text: r.children[1].value.trim() })).filter(s=>s.text);
+      if(!steps.length) return alert('Add at least one step');
+      const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Math.random().toString(36).slice(2,6);
+      state.recipes.push({ id, name, ingredients: ings, steps });
+      state.current = id; state.stepIndex=0; save();
+      // reset composer
+      $('#rName').value=''; $('#rIngr').value=''; buildComposerRows([]); $('#composer').hidden=true; renderAll(); beep(840);
+    }
+
+    // Theme
+    const root = document.documentElement;
+    function setTheme(dark){ root.setAttribute('data-theme', dark? 'dark':'light'); localStorage.setItem('pocket-chef-theme', dark? 'dark':'light'); }
+    $('#modeBtn').onclick = () => { const dark = root.getAttribute('data-theme')!=='dark'; setTheme(dark); beep(dark?820:560); };
+    setTheme(localStorage.getItem('pocket-chef-theme')==='dark');
+
+    // Init
+    load();
+    if(!state.recipes.length){ state.recipes = []; }
+    renderAll();
+  </script>
+</body>
+</html>
