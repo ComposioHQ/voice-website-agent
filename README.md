@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Voice Website Agent
 
-## Getting Started
+Speak your intent. The agent transcribes your voice, plans with GPT‑5, executes tools to update a live HTML preview, and replies by voice.
 
-First, run the development server:
+### Features
+- Modular pipeline: STT → Agent (with tools) → TTS
+- Progressive UX: chat updates after each stage
+- Composio tool `WRITE_FULL_HTML_PREVIEW` to write `public/preview.html`
+- Next.js App Router (Node runtime)
 
+### Quickstart
+1) Install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2) Environment
+Create `.env.local`:
+```bash
+OPENAI_API_KEY=your_openai_api_key
+COMPOSIO_API_KEY=your_composio_api_key
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3) Run
+```bash
+npm run dev
+```
+Open http://localhost:3000 and click the mic.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### API routes
+- POST `/api/stt`
+  - Request: multipart form with `audio` (e.g., `audio/webm`)
+  - Response: `{ transcript: string }`
+- POST `/api/agent`
+  - Request: JSON `{ text: string }`
+  - Response: `{ text: string }`
+- POST `/api/tts`
+  - Request: JSON `{ text: string }`
+  - Response: `{ audioBase64: string, mimeType: string }`
+- POST `/api/voice-chat` (orchestrator)
+  - Request: multipart form with `audio`
+  - Response: `{ transcript, text, audioBase64, mimeType }`
 
-## Learn More
+### Architecture
+- `app/api/_lib/agentState.ts`: minimal global message state + OpenAI message adapter
+- `app/api/_lib/openaiClient.ts`: OpenAI client factory
+- `app/api/_lib/composioTools.ts`: Composio setup and `ensureToolsRegistered()`
+- `app/api/_lib/stt.ts`: Whisper transcription
+- `app/api/_lib/agent.ts`: GPT‑5 reasoning, tool calls, summary + voice‑friendly rewrite
+- `app/api/_lib/tts.ts`: Text‑to‑speech with length‑safe condensation
 
-To learn more about Next.js, take a look at the following resources:
+Notes
+- Global state is in‑memory; use persistent storage for multi‑user production.
+- Tool list is intentionally small to keep behavior focused and safe.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### cURL examples
+STT
+```bash
+curl -X POST http://localhost:3000/api/stt \
+  -F "audio=@input.webm;type=audio/webm"
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Agent
+```bash
+curl -X POST http://localhost:3000/api/agent \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Create a landing page with a hero and CTA"}'
+```
 
-## Deploy on Vercel
+TTS
+```bash
+curl -X POST http://localhost:3000/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Your page is ready."}'
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Composio
+- GitHub: [Composio](https://github.com/composiohq/composio)
+- Website: [composio.dev](https://composio.dev)
