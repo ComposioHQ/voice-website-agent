@@ -6,6 +6,7 @@ Speak your intent. The agent transcribes your voice, plans with GPT‑5, execute
 - Modular pipeline: STT → Agent (with tools) → TTS
 - Progressive UX: chat updates after each stage
 - Composio tool `WRITE_FULL_HTML_PREVIEW` to write `public/preview.html`
+- Composio Notion tools: `NOTION_FETCH_DATA`, `NOTION_FETCH_BLOCK_CONTENTS`
 - Next.js App Router (Node runtime)
 
 ### Quickstart
@@ -75,5 +76,20 @@ curl -X POST http://localhost:3000/api/tts \
 ```
 
 ### Composio
-- GitHub: [Composio](https://github.com/composiohq/composio)
-- Website: [composio.dev](https://composio.dev)
+ - GitHub: [Composio](https://github.com/composiohq/composio)
+ - Website: [composio.dev](https://composio.dev)
+
+### Composio + Notion setup
+1) Create API key
+   - Go to the Composio platform dashboard and create an API key.
+   - Add it to `.env.local` as `COMPOSIO_API_KEY` (see Environment section above).
+
+2) Connect Notion
+   - In the Composio platform, Add Notion to your project.
+   - Complete the Notion OAuth flow. Share the pages/databases you want the agent to read with the Composio integration so it has access.
+   - Ensure this Notion connection is available as the default connection (aka default user/connection). The agent will use the first connected account by default;
+
+3) Tools used
+   - `NOTION_FETCH_DATA`: fetches metadata/data for pages or databases.
+   - `NOTION_FETCH_BLOCK_CONTENTS`: fetches the block contents of a page.
+
